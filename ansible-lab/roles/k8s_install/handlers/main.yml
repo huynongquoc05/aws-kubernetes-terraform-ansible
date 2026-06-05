@@ -1,0 +1,7 @@
+#SPDX-License-Identifier: MIT-0
+- name: restart containerd
+  systemd:
+     name: containerd
+     enabled: yes
+     state: restarted
+# handlers file for roles/k8s_install

@@ -1,0 +1,64 @@
+---
+# ========================================================================
+# GIAI ĐOẠN 1: KHỞI TẠO MASTER NODE VÀ CÀI ĐẶT MẠNG
+# ========================================================================
+- name: Tao cum bang control-plane
+  hosts: control_plane
+  become: yes
+  tasks:
+    - name: Kiem tra xem kubeadm da duoc khoi tao chua
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: kubeadm_check
+
+    - name: Chay lenh khoi tao kubeadm (chi chay lan dau tien)
+      # Lưu ý: Tham số chuẩn của kubeadm là --apiserver-advertise-address chứ không phải --api-advertise-address
+      command: kubeadm init --apiserver-advertise-address={{ private_ip }} --pod-network-cidr=192.168.0.0/16
+      when: not kubeadm_check.stat.exists
+
+    - name: Tao thu muc cau hinh kubectl cho user ubuntu
+      file:
+        path: /home/ubuntu/.kube
+        state: directory
+        mode: '0755'
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Cap quyen truy cap file cau hinh kubeadm cho user ubuntu
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/ubuntu/.kube/config
+        remote_src: yes
+        owner: ubuntu
+        group: ubuntu
+        mode: '0600'
+
+    - name: Cai dat Calico network plugin (chi chay lan dau tien)
+      become: no
+      command: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml
+      when: not kubeadm_check.stat.exists
+
+    - name: Tao token va lay cau lenh Join (chi chay lan dau tien)
+      command: kubeadm token create --print-join-command
+      register: join_command_raw
+      changed_when: false
+
+    - name: Luu cau lenh Join vao bien toan cuc de su dung sau nay
+      set_fact:
+        kubeadm_join_command: "{{ join_command_raw.stdout }}"
+
+# ========================================================================
+# GIAI ĐOẠN 2: CÁC WORKER NODE XIN GIA NHẬP CỤM
+# ========================================================================
+- name: Ket noi workers vao cum
+  hosts: workers
+  become: yes
+  tasks:
+    - name: Kiem tra xem node da duoc ket noi vao cum chua
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: worker_check
+
+    - name: Thuc thi lenh join de ket noi vao cum (chi chay lan dau tien)
+      command: "{{ hostvars['control_plane']['kubeadm_join_command'] }}"
+      when: not worker_check.stat.exists

@@ -1,0 +1,7 @@
+- name: Cai dat monitoring cho K8s
+  hosts: control_plane
+  become: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  roles:
+        - setup-monitoring

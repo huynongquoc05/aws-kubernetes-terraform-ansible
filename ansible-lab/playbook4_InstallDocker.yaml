@@ -1,0 +1,5 @@
+- name: Cai dat Docker
+  hosts: workers
+  become: yes
+  roles:
+        - role3-DockerInstall

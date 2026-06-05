@@ -1,0 +1,15 @@
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Python Virtual Environment
+.venv/
+
+# Ansible auto-generated dynamic inventory
+#ansible-lab/inventory.ini
+
+# IDE settings
+.idea/

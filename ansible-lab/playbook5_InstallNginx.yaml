@@ -1,0 +1,20 @@
+- name: cai dat va cau hinh web server
+  hosts: k8s_cluster
+  become: true
+
+  tasks:
+    - name: cap nhat apt
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: dam bao nginx duowc cai dat
+      apt:
+        name: nginx
+        state: present
+
+    - name: dam bao nginx dang chay
+      service:
+        name: nginx
+        state: started
+        enabled: true
