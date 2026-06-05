@@ -88,7 +88,7 @@ Thay vì sau khi `terraform apply` phải vào xem IP rồi copy vào file inven
 
 **Tách playbook theo từng bước**
 
-4 playbook độc lập thay vì một file lớn. Lý do thực tế: khi debug có thể re-run đúng bước bị lỗi mà không chạy lại toàn bộ. Ví dụ nếu playbook3 (addons) lỗi, không cần init lại cluster từ đầu.
+5 playbook độc lập thay vì một file lớn. Lý do thực tế: khi debug có thể re-run đúng bước bị lỗi mà không chạy lại toàn bộ. Ví dụ nếu playbook3 (addons) lỗi, không cần init lại cluster từ đầu.
 
 **Dùng kubeadm thay vì EKS**
 
@@ -98,7 +98,7 @@ EKS đơn giản hơn nhưng che đi hết phần bootstrap. Dùng kubeadm để
 
 ## Yêu cầu
 
-- AWS account + credentials đã cấu hình (`~/.aws/credentials`)
+- AWS account + aws configure (AWS Access Key ID, AWS Secret Access Key, Default region name, Default output format)
 - SSH key tại `~/sshkeyaws` (hoặc đổi path trong `inventory.ini`)
 - Terraform >= 1.0
 - Ansible >= 2.12
