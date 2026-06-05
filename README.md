@@ -26,18 +26,29 @@ terraform apply
     │
     ├── VPC, Security Groups, EC2 x3
     │
-    └── outputs.tf ──► inventory.ini (tự động, không cần hardcode IP)
+    └── outputs.tf ──► inventory.ini
                             │
                 ┌───────────┴───────────┐
-                │    4 Ansible Playbooks │
+                │    5 Ansible Playbooks │
                 └───────────────────────┘
                     │
-                    ├── playbook1: Cài Kubernetes (kubeadm, kubelet, kubectl)
+                    ├── playbook1: Cài Kubernetes
+                    │       └── kubeadm, kubelet, kubectl
+                    │
                     ├── playbook2: Init cluster + join worker nodes
-                    ├── playbook3: Cài addons (Nginx Ingress, Metrics Server)
-                    └── playbook4+5: Cài Docker + Nginx, setup monitoring
-                                     (Prometheus, Grafana via kube-prometheus-stack)
-
+                    │       └── kubeadm init, kubeadm join
+                    │
+                    ├── playbook3: Cài Kubernetes addons & Monitoring
+                    │       ├── Nginx Ingress Controller
+                    │       ├── Metrics Server
+                    │       └── Prometheus + Grafana
+                    │           (kube-prometheus-stack)
+                    │
+                    ├── playbook4: Cài đặt Docker
+                    │       └── Docker Engine, Docker CLI
+                    │
+                    └── playbook5: Cài đặt Nginx
+                            
 Kết quả:
     control-plane (x1) ── worker-node-1 (x1)
                        └─ worker-node-2 (x1)
@@ -58,7 +69,7 @@ Kết quả:
     ├── inventory.ini               # Auto-generated bởi Terraform, không edit tay
     ├── playbook1_InstallK8s.yaml   # Cài kubeadm, kubelet, kubectl lên tất cả nodes
     ├── playbook2_k8s_init.yml      # Init control plane + join workers
-    ├── playbook3_k8s_addons.yaml   # Nginx Ingress Controller, Metrics Server
+    ├── playbook3_k8s_addons.yaml   # Nginx Ingress Controller, Metrics Server, Monitoring
     ├── playbook4_InstallDocker.yaml
     ├── playbook5_InstallNginx.yaml
     └── roles/
@@ -116,8 +127,8 @@ ansible-playbook -i ansible-lab/inventory.ini ansible-lab/playbook4_InstallDocke
 ansible-playbook -i ansible-lab/inventory.ini ansible-lab/playbook5_InstallNginx.yaml
 
 # 6. Verify
-kubectl get nodes
-kubectl get pods -A
+ansible control_plane -a "kubectl get nodes" -i inventory.ini
+ansible control_plane -a "kubectl get pods -A" -i inventory.ini
 ```
 
 ---
@@ -127,14 +138,47 @@ kubectl get pods -A
 Sau khi chạy xong:
 
 ```
-NAME            STATUS   ROLES           AGE
-control-plane   Ready    control-plane   ...
-worker-node-1   Ready    <none>          ...
-worker-node-2   Ready    <none>          ...
+NAME               STATUS   ROLES           AGE   VERSION
+ip-172-31-21-96    Ready    <none>          57m   v1.30.14
+ip-172-31-35-243   Ready    <none>          57m   v1.30.14
+ip-172-31-39-95    Ready    control-plane   58m   v1.30.14
+
 ```
 
 Grafana và Prometheus accessible qua Nginx Ingress. HPA hoạt động nhờ Metrics Server.
+```bash
+ansible control_plane -a "kubectl get ingress" -i inventory.ini
+[WARNING]: Found both group and host with same name: control_plane
+control_plane | CHANGED | rc=0 >>
+NAME                   CLASS   HOSTS                                                                  ADDRESS        PORTS   AGE
+alertmanager-ingress   nginx   alertmanager.13.250.119.132.nip.io,alertmanager.172.31.35.243.nip.io   172.31.21.96   80      56m
+grafana-ingress        nginx   grafana.13.250.119.132.nip.io,grafana.172.31.35.243.nip.io             172.31.21.96   80      56m
+prometheus-ingress     nginx   prometheus.13.250.119.132.nip.io,prometheus.172.31.35.243.nip.io       172.31.21.96   80      56m
+```
 
+Xem cổng ingress được mở và curl qua hosts:
+```
+ansible control_plane -a "kubectl get svc -n ingress-nginx" -i inventory.ini
+
+control_plane | CHANGED | rc=0 >>
+NAME                                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                      AGE
+ingress-nginx-controller             NodePort    10.100.239.189   <none>        80:32030/TCP,443:31567/TCP   61m
+ingress-nginx-controller-admission   ClusterIP   10.103.144.169   <none>        443/TCP                      61m
+```
+```
+ansible control_plane -a "curl -I http://grafana.13.250.119.132.nip.io:32030" -i inventory.ini
+
+control_plane | CHANGED | rc=0 >>
+HTTP/1.1 302 Found
+Date: Fri, 05 Jun 2026 15:29:02 GMT
+Content-Type: text/html; charset=utf-8
+Connection: keep-alive
+Cache-Control: no-store
+Location: /login
+X-Content-Type-Options: nosniff
+X-Frame-Options: deny
+X-Xss-Protection: 1; mode=block
+```
 ---
 
 ## Dọn dẹp
