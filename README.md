@@ -119,16 +119,18 @@ ansible-playbook -i ansible-lab/inventory.ini ansible-lab/playbook1_InstallK8s.y
 # 3. Init control plane và join workers
 ansible-playbook -i ansible-lab/inventory.ini ansible-lab/playbook2_k8s_init.yml
 
-# 4. Cài addons (Ingress, Metrics Server)
+# 4. Cài addons (Ingress, Metrics Server, Monitoring)
 ansible-playbook -i ansible-lab/inventory.ini ansible-lab/playbook3_k8s_addons.yaml
 
-# 5. Cài monitoring stack
+# 5. Cài Docker và Nginx (optional)
 ansible-playbook -i ansible-lab/inventory.ini ansible-lab/playbook4_InstallDocker.yaml
 ansible-playbook -i ansible-lab/inventory.ini ansible-lab/playbook5_InstallNginx.yaml
 
 # 6. Verify
+cd ansible-lab
 ansible control_plane -a "kubectl get nodes" -i inventory.ini
 ansible control_plane -a "kubectl get pods -A" -i inventory.ini
+ansible control_plane -a "kubectl get ingress" -i inventory.ini
 ```
 
 ---
@@ -144,17 +146,50 @@ ip-172-31-35-243   Ready    <none>          57m   v1.30.14
 ip-172-31-39-95    Ready    control-plane   58m   v1.30.14
 
 ```
+Các pods đang chạy:
+```
+ansible control_plane -a "kubectl get pods -A" -i inventory.ini
+
+control_plane | CHANGED | rc=0 >>
+NAMESPACE       NAME                                                     READY   STATUS    RESTARTS   AGE
+default         alertmanager-monitoring-kube-prometheus-alertmanager-0   2/2     Running   0          54m
+default         monitoring-grafana-5465f97769-bvvbf                      3/3     Running   0          54m
+default         monitoring-kube-prometheus-operator-86d948958c-dg9r6     1/1     Running   0          54m
+default         monitoring-kube-state-metrics-99d68447-fxx7t             1/1     Running   0          54m
+default         monitoring-prometheus-node-exporter-5tm6m                1/1     Running   0          54m
+default         monitoring-prometheus-node-exporter-5zpgw                1/1     Running   0          54m
+default         monitoring-prometheus-node-exporter-qvw2v                1/1     Running   0          54m
+default         prometheus-monitoring-kube-prometheus-prometheus-0       2/2     Running   0          54m
+ingress-nginx   ingress-nginx-controller-556945c8b6-mhzvp                1/1     Running   0          55m
+kube-system     calico-kube-controllers-564985c589-rkzcm                 1/1     Running   0          58m
+kube-system     calico-node-49cp8                                        1/1     Running   0          58m
+kube-system     calico-node-jp7jm                                        1/1     Running   0          58m
+kube-system     calico-node-plwv4                                        1/1     Running   0          58m
+kube-system     coredns-55cb58b774-bfn9r                                 1/1     Running   0          58m
+kube-system     coredns-55cb58b774-bvrhl                                 1/1     Running   0          58m
+kube-system     etcd-ip-172-31-39-95                                     1/1     Running   0          59m
+kube-system     kube-apiserver-ip-172-31-39-95                           1/1     Running   0          59m
+kube-system     kube-controller-manager-ip-172-31-39-95                  1/1     Running   0          59m
+kube-system     kube-proxy-8j5pt                                         1/1     Running   0          58m
+kube-system     kube-proxy-hjms5                                         1/1     Running   0          58m
+kube-system     kube-proxy-jjndd                                         1/1     Running   0          58m
+kube-system     kube-scheduler-ip-172-31-39-95                           1/1     Running   0          59m
+kube-system     metrics-server-65d5d6f74d-2jpjn                          1/1     Running   0          55m
+
+```
+
 
 Grafana và Prometheus accessible qua Nginx Ingress. HPA hoạt động nhờ Metrics Server.
 ```bash
 ansible control_plane -a "kubectl get ingress" -i inventory.ini
-[WARNING]: Found both group and host with same name: control_plane
+
 control_plane | CHANGED | rc=0 >>
 NAME                   CLASS   HOSTS                                                                  ADDRESS        PORTS   AGE
 alertmanager-ingress   nginx   alertmanager.13.250.119.132.nip.io,alertmanager.172.31.35.243.nip.io   172.31.21.96   80      56m
 grafana-ingress        nginx   grafana.13.250.119.132.nip.io,grafana.172.31.35.243.nip.io             172.31.21.96   80      56m
 prometheus-ingress     nginx   prometheus.13.250.119.132.nip.io,prometheus.172.31.35.243.nip.io       172.31.21.96   80      56m
 ```
+
 
 Xem cổng ingress được mở và curl qua hosts:
 ```
@@ -165,6 +200,8 @@ NAME                                 TYPE        CLUSTER-IP       EXTERNAL-IP   
 ingress-nginx-controller             NodePort    10.100.239.189   <none>        80:32030/TCP,443:31567/TCP   61m
 ingress-nginx-controller-admission   ClusterIP   10.103.144.169   <none>        443/TCP                      61m
 ```
+
+
 ```
 ansible control_plane -a "curl -I http://grafana.13.250.119.132.nip.io:32030" -i inventory.ini
 
