@@ -20,7 +20,7 @@ resource "aws_instance" "control_plane" {
   }
 
   lifecycle {
-    prevent_destroy = false
+    prevent_destroy = true
   }
 }
 
@@ -42,7 +42,7 @@ resource "aws_instance" "worker_node1_ec2" {
   }
 
   lifecycle {
-    prevent_destroy = false
+    prevent_destroy = true
   }
 }
 
@@ -62,7 +62,7 @@ resource "aws_instance" "worker_node2_ec2" {
   }
 
   lifecycle {
-    prevent_destroy = false
+    prevent_destroy = true
   }
   root_block_device {
     volume_size = 15
@@ -179,6 +179,14 @@ resource "aws_security_group" "cluster_sec_g" {
     to_port   = 6443
     protocol  = "tcp"
     self      = true
+  }
+
+  # 9. MỞ TOÀN BỘ TRAFFIC NỘI BỘ (ALL TRAFFIC) - Cho phép các máy cùng SG gọi nhau bất kể cổng/giao thức nào
+  ingress {
+    from_port = 0
+    to_port   = 0
+    protocol  = "-1" # -1 tương đương với "All" giao thức trên AWS (TCP, UDP, ICMP...)
+    self      = true # Chỉ áp dụng nội bộ cho các tài nguyên gán chung Security Group này
   }
 
   # --- CHIỀU ĐI RA (OUTBOUND RULES / EGRESS) ---
