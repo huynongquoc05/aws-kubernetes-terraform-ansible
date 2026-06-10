@@ -19,7 +19,7 @@ variable "vpc_id" {
 variable "cluster_instance_state" {
   type        = string
   description = "Trạng thái hoạt động của cả cụm máy chủ (running hoặc stopped)"
-  default     = "stopped"
+  default     = "running"
 }
 
 # --- BIẾN MỚI THÊM: HỆ ĐIỀU HÀNH & PHẦN CỨNG ---
