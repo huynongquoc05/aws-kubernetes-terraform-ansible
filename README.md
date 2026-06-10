@@ -86,6 +86,27 @@ Kết quả:
 
 Thay vì sau khi `terraform apply` phải vào xem IP rồi copy vào file inventory tay, `local_resources.tf` dùng data source để lấy IP của từng EC2 và ghi thẳng vào `inventory.ini`. Tear down rồi provision lại, inventory tự cập nhật — không lo nhầm IP.
 
+Ansible inventory output mẫu:
+```
+[control_plane]
+control_plane ansible_host=18.x.x.x private_ip=172.31.45.80
+
+[workers]
+worker1 ansible_host=52.x.x.x private_ip=172.31.33.39
+worker2 ansible_host=52.x.x.x private_ip=172.31.31.173
+
+[k8s_cluster:children]
+control_plane
+workers
+
+[all:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/sshkeyaws
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+ansible_python_interpreter=/usr/bin/python3
+
+```
+
 **Tách playbook theo từng bước**
 
 5 playbook độc lập thay vì một file lớn. Lý do thực tế: khi debug có thể re-run đúng bước bị lỗi mà không chạy lại toàn bộ. Ví dụ nếu playbook3 (addons) lỗi, không cần init lại cluster từ đầu.
