@@ -112,30 +112,30 @@ terraform apply
     │
     ├── VPC, Security Groups, EC2 x6, Network Load Balancer
     │
-    └── outputs.tf ──► inventory.ini
-                            │
-                ┌───────────┴───────────┐
-                │    5 Ansible Playbooks │
-                └───────────────────────┘
-                    │
-                    ├── playbook1: Cài Kubernetes
-                    │       └── kubeadm, kubelet, kubectl (cả 6 node)
-                    │
-                    ├── playbook2: Init HA cluster + join control plane + join worker
-                    │       ├── kubeadm init --control-plane-endpoint=<NLB DNS>:6443 --upload-certs
-                    │       ├── kubeadm join --control-plane (node2, node3)
-                    │       └── kubeadm join (worker1, worker2, worker3)
-                    │
-                    ├── playbook3: Cài Kubernetes addons & Monitoring
-                    │       ├── Nginx Ingress Controller
-                    │       ├── Metrics Server
-                    │       └── Prometheus + Grafana
-                    │           (kube-prometheus-stack)
-                    │
-                    ├── playbook4: Cài đặt Docker
-                    │       └── Docker Engine, Docker CLI
-                    │
-                    └── playbook5: Cài đặt Nginx
+    └── local_reesources.tf (write output)──► inventory.ini
+                                                    │
+                                        ┌───────────┴───────────┐
+                                        │    5 Ansible Playbooks │
+                                        └───────────────────────┘
+                                            │
+                                            ├── playbook1: Cài Kubernetes
+                                            │       └── kubeadm, kubelet, kubectl (cả 6 node)
+                                            │
+                                            ├── playbook2: Init HA cluster + join control plane + join worker
+                                            │       ├── kubeadm init --control-plane-endpoint=<NLB DNS>:6443 --upload-certs
+                                            │       ├── kubeadm join --control-plane (node2, node3)
+                                            │       └── kubeadm join (worker1, worker2, worker3)
+                                            │
+                                            ├── playbook3: Cài Kubernetes addons & Monitoring
+                                            │       ├── Nginx Ingress Controller
+                                            │       ├── Metrics Server
+                                            │       └── Prometheus + Grafana
+                                            │           (kube-prometheus-stack)
+                                            │
+                                            ├── playbook4: Cài đặt Docker
+                                            │       └── Docker Engine, Docker CLI
+                                            │
+                                            └── playbook5: Cài đặt Nginx
 
 
 ```
