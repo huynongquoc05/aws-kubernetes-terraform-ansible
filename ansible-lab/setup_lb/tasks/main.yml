@@ -1,0 +1,18 @@
+
+
+#- name: Đảm bảo Nginx được cài đặt
+#  apt:
+#    name: nginx
+#    state: present
+#    update_cache: yes
+- name: Coa default config nginx
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: restart nginx
+
+- name: Bơm file cấu hình Loadbalancer
+  template:
+    src: lb.conf.j2  
+    dest: /etc/nginx/conf.d/lb.conf
+  notify: restart nginx

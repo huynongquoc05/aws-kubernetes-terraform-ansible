@@ -1,0 +1,34 @@
+- name: cai dat va cau hinh web server
+  hosts: all
+  become: true
+  tasks:
+    - name: cap nhat apt
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: dam bao nginx duowc cai dat
+      apt:
+        name: nginx
+        state: present
+
+    - name: dam bao nginx dang chay
+      service:
+        name: nginx
+        state: started
+        enabled: true
+
+#- name: cau hinh load balancer
+#  hosts: loadbalancer
+#  become: true # Vẫn giữ nguyên become: true ở đây cho các task cấu hình Nginx bên dưới
+#
+#  pre_tasks:
+#    - name: Lấy cổng NodePort của Ingress từ Control Plane
+#      command: kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}'
+#      register: ingress_nodeport_80
+#      delegate_to: "{{ groups['control_plane'][0] }}"
+#      run_once: true
+#      become: false  # <--- BỔ SUNG DÒNG NÀY ĐỂ TRÁNH LỖI LOCALHOST:8080
+#
+#  roles:
+#    - setup_lb

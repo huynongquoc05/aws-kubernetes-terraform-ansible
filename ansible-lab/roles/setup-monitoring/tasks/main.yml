@@ -7,6 +7,10 @@
   register: ingress_result
   changed_when: "'created' in ingress_result.stdout or 'configured' in ingress_result.stdout"
 
+- name: Ép cứng NodePort (32080 cho HTTP, 32443 cho HTTPS) cho Ingress Controller
+  command: >
+    kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{"spec": {"ports": [{"port": 80, "nodePort": 32080}, {"port": 443, "nodePort": 32443}]}}'
+
 - name: Wait for Ingress Controller to be ready
   command: >
     kubectl wait --namespace ingress-nginx 
@@ -57,9 +61,22 @@
 - name: Install kube-prometheus-stack
   command: helm install monitoring prometheus-community/kube-prometheus-stack --timeout 15m
   when: monitoring_release.rc != 0
+
+
 # =====================================================================
 # 4. TRIỂN KHAI INGRESS CHO MONITORING (DÙNG TEMPLATE)
 # =====================================================================
+- name: Phân giải tên miền AWS ELB sang danh sách IP Public
+  shell: |
+    dig +short {{ hostvars['loadbalancer_api']['ansible_host'] }} | grep -E '^[0-9.]+$'
+  register: elb_dns_lookup
+  changed_when: false
+  delegate_to: localhost # Chạy trực tiếp tại máy Ansible Control Node của bạn
+
+- name: Thiết lập danh sách IP của Load Balancer làm biến toàn cục
+  set_fact:
+    lb_ips: "{{ elb_dns_lookup.stdout_lines }}"
+
 - name: Generate Monitoring Ingress manifest from template
   template:
     src: monitoring-ingress-k8s.yaml.j2

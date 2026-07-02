@@ -1,22 +1,26 @@
 ---
 # ========================================================================
-# GIAI ĐOẠN 1: KHỞI TẠO MASTER NODE VÀ CÀI ĐẶT MẠNG
+# GIAI ĐOẠN 1: KHỞI TẠO MASTER NODE ĐẦU TIÊN (LEADER - NODE1)
 # ========================================================================
-- name: Tao cum bang control-plane
-  hosts: control_plane
+- name: Khởi tạo cụm K8s HA trên Master Node đầu tiên
+  hosts: control_plane[0] # Chỉ chạy duy nhất trên node đầu tiên trong danh sách (node1)
   become: yes
   tasks:
-    - name: Kiem tra xem kubeadm da duoc khoi tao chua
+    - name: Kiểm tra xem kubeadm đã được khởi tạo chưa
       stat:
         path: /etc/kubernetes/admin.conf
       register: kubeadm_check
 
-    - name: Chay lenh khoi tao kubeadm (chi chay lan dau tien)
-      # Lưu ý: Tham số chuẩn của kubeadm là --apiserver-advertise-address chứ không phải --api-advertise-address
-      command: kubeadm init --apiserver-advertise-address={{ private_ip }} --pod-network-cidr=192.168.0.0/16
+    - name: Chạy lệnh khởi tạo kubeadm với cấu hình HA (Cổng NLB 6443)
+      command: >
+        kubeadm init 
+        --control-plane-endpoint="{{ hostvars[groups['loadbalancer'][0]]['ansible_host'] }}:6443"
+        --apiserver-advertise-address="{{ private_ip }}"
+        --upload-certs 
+        --pod-network-cidr=192.168.0.0/16
       when: not kubeadm_check.stat.exists
 
-    - name: Tao thu muc cau hinh kubectl cho user ubuntu
+    - name: Tạo thư mục cấu hình kubectl cho user ubuntu
       file:
         path: /home/ubuntu/.kube
         state: directory
@@ -24,7 +28,74 @@
         owner: ubuntu
         group: ubuntu
 
-    - name: Cap quyen truy cap file cau hinh kubeadm cho user ubuntu
+    - name: Cấp quyền truy cập file cấu hình kubeadm cho user ubuntu
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/ubuntu/.kube/config
+        remote_src: yes
+        owner: ubuntu
+        group: ubuntu
+        mode: '0600'
+          # ==========================================
+          # BỔ SUNG TASK CHỜ NLB THÔNG MẠCH Ở ĐÂY
+          # ==========================================
+    - name: Chờ Network Load Balancer (NLB) cập nhật trạng thái sang Healthy (Cổng 6443)
+      wait_for:
+        host: "{{ hostvars[groups['loadbalancer'][0]]['ansible_host'] }}"
+        port: 6443
+        state: started
+        timeout: 180 # Chờ tối đa 3 phút cho NLB chuyển trạng thái ấm lên
+        delay: 5     # Cứ 5 giây kiểm tra một lần
+
+    - name: Cài đặt Calico network plugin
+      become: no
+      command: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml
+      when: not kubeadm_check.stat.exists
+
+    - name: Lấy lệnh Join dành riêng cho các máy MASTER phụ (Control Plane Join)
+      # CHUYỂN THÀNH MODULE SHELL
+      shell: |
+        kubeadm token create --print-join-command --certificate-key $(kubeadm init phase upload-certs --upload-certs | tail -n 1)
+      register: master_join_command_raw
+      changed_when: false
+
+    - name: Lấy lệnh Join dành cho các máy WORKER thông thường
+      # Giữ nguyên command hoặc đổi sang shell cho đồng bộ
+      shell: kubeadm token create --print-join-command
+      register: worker_join_command_raw
+      changed_when: false
+
+    - name: Lưu các câu lệnh Join vào biến toàn cục để chia sẻ cho các node sau
+      set_fact:
+        kubeadm_master_join_command: "{{ master_join_command_raw.stdout }}"
+        kubeadm_worker_join_command: "{{ worker_join_command_raw.stdout }}"
+
+# ========================================================================
+# GIAI ĐOẠN 2: CÁC MASTER PHỤ (NODE2, NODE3) GIA NHẬP VÀO CỤM CONTROL PLANE
+# ========================================================================
+- name: Kết nối các máy Master phụ vào cụm Control Plane
+  hosts: control_plane:!control_plane[0] # Chạy trên toàn bộ nhóm control_plane NGOẠI TRỪ node đầu tiên
+  become: yes
+  tasks:
+    - name: Kiểm tra xem máy Master này đã join chưa
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: master_check
+
+    - name: Thực thi lệnh Join kèm chứng chỉ để làm Control Plane (Master HA)
+      # Lệnh này sẽ kết thúc bằng flag `--control-plane --certificate-key xxxxx` do lệnh gộp ở Giai đoạn 1 sinh ra
+      command: "{{ hostvars[groups['control_plane'][0]]['kubeadm_master_join_command'] }} --control-plane"
+      when: not master_check.stat.exists
+
+    - name: Tạo thư mục cấu hình kubectl cho user ubuntu trên Master phụ
+      file:
+        path: /home/ubuntu/.kube
+        state: directory
+        mode: '0755'
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Sao chép cấu hình admin.conf sang user ubuntu của Master phụ
       copy:
         src: /etc/kubernetes/admin.conf
         dest: /home/ubuntu/.kube/config
@@ -33,32 +104,18 @@
         group: ubuntu
         mode: '0600'
 
-    - name: Cai dat Calico network plugin (chi chay lan dau tien)
-      become: no
-      command: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml
-      when: not kubeadm_check.stat.exists
-
-    - name: Tao token va lay cau lenh Join (chi chay lan dau tien)
-      command: kubeadm token create --print-join-command
-      register: join_command_raw
-      changed_when: false
-
-    - name: Luu cau lenh Join vao bien toan cuc de su dung sau nay
-      set_fact:
-        kubeadm_join_command: "{{ join_command_raw.stdout }}"
-
 # ========================================================================
-# GIAI ĐOẠN 2: CÁC WORKER NODE XIN GIA NHẬP CỤM
+# GIAI ĐOẠN 3: CÁC WORKER NODE XIN GIA NHẬP CỤM
 # ========================================================================
-- name: Ket noi workers vao cum
+- name: Kết nối các máy Workers vào cụm
   hosts: workers
   become: yes
   tasks:
-    - name: Kiem tra xem node da duoc ket noi vao cum chua
+    - name: Kiểm tra xem worker node đã được kết nối chưa
       stat:
         path: /etc/kubernetes/kubelet.conf
       register: worker_check
 
-    - name: Thuc thi lenh join de ket noi vao cum (chi chay lan dau tien)
-      command: "{{ hostvars['control_plane']['kubeadm_join_command'] }}"
+    - name: Thực thi lệnh join thông thường của Worker (Lấy từ biến của node1)
+      command: "{{ hostvars[groups['control_plane'][0]]['kubeadm_worker_join_command'] }}"
       when: not worker_check.stat.exists

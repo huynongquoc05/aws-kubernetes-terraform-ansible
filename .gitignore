@@ -7,7 +7,7 @@
 
 # Python Virtual Environment
 .venv/
-
+structure.txt
 # Ansible auto-generated dynamic inventory
 #ansible-lab/inventory.ini
 

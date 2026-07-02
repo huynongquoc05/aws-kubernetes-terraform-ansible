@@ -1,0 +1,84 @@
+
+# ---------------------------------------------------------
+# Upstream chỉ dùng cho Forum (vì Ingress của Forum là catch-all '*')
+# ---------------------------------------------------------
+upstream backend_cluster {
+    {% for host in groups['workers'] %}
+    server {{ hostvars[host]['private_ip'] }}:{{ ingress_nodeport_80.stdout }};
+    {% endfor %}
+}
+
+# ---------------------------------------------------------
+# 1. Block Prometheus -> Đẩy thẳng vào Private IP Worker 1
+# ---------------------------------------------------------
+server {
+    listen 80;
+    server_name prometheus.{{ hostvars['loadbalancer']['ansible_host'] }}.nip.io;
+
+    location / {
+        # Đẩy thẳng traffic tới worker1 (bỏ qua DNS lookup nip.io của Nginx để tối ưu tốc độ)
+        proxy_pass http://{{ hostvars['worker1']['private_ip'] }}:{{ ingress_nodeport_80.stdout }};
+
+        # Sửa Host header để K8s Ingress Controller nhận diện đúng rule
+        proxy_set_header Host prometheus.{{ hostvars['worker1']['private_ip'] }}.nip.io;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+
+# ---------------------------------------------------------
+# 2. Block Grafana -> Đẩy thẳng vào Private IP Worker 1
+# ---------------------------------------------------------
+server {
+    listen 80;
+    server_name grafana.{{ hostvars['loadbalancer']['ansible_host'] }}.nip.io;
+
+    location / {
+        proxy_pass http://{{ hostvars['worker1']['private_ip'] }}:{{ ingress_nodeport_80.stdout }};
+
+        # 1. CHIỀU LÒNG K8S INGRESS: Trả đúng Host nội bộ để Ingress route về Grafana
+        proxy_set_header Host grafana.{{ hostvars['worker1']['private_ip'] }}.nip.io;
+
+        # 2. ĐÁNH LỪA GRAFANA: Ghi đè Origin khớp với Host nội bộ để vượt qua lỗi "No data" (Anti-CSRF)
+        proxy_set_header Origin "http://grafana.{{ hostvars['worker1']['private_ip'] }}.nip.io";
+
+        # 3. CÁC HEADER TIÊU CHUẨN
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 4. CẤU HÌNH WEBSOCKET CHO GRAFANA (TÍNH NĂNG LIVE STREAM DỮ LIỆU)
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+# ---------------------------------------------------------
+# 3. Block Alertmanager -> Đẩy thẳng vào Private IP Worker 1
+# ---------------------------------------------------------
+server {
+    listen 80;
+    server_name alertmanager.{{ hostvars['loadbalancer']['ansible_host'] }}.nip.io;
+
+    location / {
+        proxy_pass http://{{ hostvars['worker1']['private_ip'] }}:{{ ingress_nodeport_80.stdout }};
+        proxy_set_header Host alertmanager.{{ hostvars['worker1']['private_ip'] }}.nip.io;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+
+# ---------------------------------------------------------
+# 4. Block Default (Forum) -> Chia đều tải qua Upstream
+# ---------------------------------------------------------
+server {
+    listen 80 default_server;
+    server_name _;
+
+    location / {
+        proxy_pass http://backend_cluster;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}

@@ -1,123 +1,13 @@
-# =====================================================================
-# KHỐI RESOURCES - CỤM MÁY CHỦ KUBERNETES
-# =====================================================================
-
-# 1. Máy chủ Control Plane (Master Node)
-resource "aws_instance" "control_plane" {
-  ami                    = var.cluster_ami
-  instance_type          = var.master_instance_type
-  subnet_id              = var.subnet_zone_a
-  key_name               = var.instance_key_name
-  vpc_security_group_ids = [aws_security_group.cluster_sec_g.id]
-
-  root_block_device {
-    volume_size = var.root_volume_size
-    volume_type = var.root_volume_type
-  }
-
-  tags = {
-    Name = "CONTROL_NODE1"
-  }
-
-  lifecycle {
-    prevent_destroy = false
-  }
-}
-
-# 2. Máy chủ Worker Node 1
-resource "aws_instance" "worker_node1_ec2" {
-  ami                    = var.cluster_ami
-  instance_type          = var.worker_instance_type
-  subnet_id              = var.subnet_zone_a
-  key_name               = var.instance_key_name
-  vpc_security_group_ids = [aws_security_group.cluster_sec_g.id]
-
-  root_block_device {
-    volume_size = 15
-    volume_type = var.root_volume_type
-  }
-
-  tags = {
-    Name = "WORK_NODE1"
-  }
-
-  lifecycle {
-    prevent_destroy = false
-  }
-}
-
-# 3. Máy chủ Worker Node 2 (Con máy cấu hình đặc biệt)
-resource "aws_instance" "worker_node2_ec2" {
-  ami                    = var.cluster_ami
-  instance_type          = var.worker2_instance_type # Dùng cấu hình to c7i-flex
-  subnet_id              = var.subnet_zone_b        # Nằm ở subnet khác biệt của nó
-  key_name               = var.instance_key_name
-  vpc_security_group_ids = [aws_security_group.cluster_sec_g.id]
-
-  # Con worker2 lúc trước bạn show không thấy khai báo block device,
-  # nhưng nếu thực tế nó dùng mặc định giống tụi kia thì cứ giữ nguyên/hoặc tiêm biến vào nhé.
-
-  tags = {
-    Name = "WORK_NODE2"
-  }
-
-  lifecycle {
-    prevent_destroy = false
-  }
-  root_block_device {
-    volume_size = 15
-    volume_type = var.root_volume_type
-  }
-}
 
 # =====================================================================
-# KHỐI TRẠNG THÁI - ĐIỀU KHIỂN BẬT/TẮT TẬP TRUNG
-# =====================================================================
-
-resource "aws_ec2_instance_state" "control_plane_state" {
-  instance_id = aws_instance.control_plane.id
-  state       = var.cluster_instance_state
-}
-
-resource "aws_ec2_instance_state" "worker_node1_state" {
-  instance_id = aws_instance.worker_node1_ec2.id
-  state       = var.cluster_instance_state
-}
-
-resource "aws_ec2_instance_state" "worker_node2_state" {
-  instance_id = aws_instance.worker_node2_ec2.id
-  state       = var.cluster_instance_state
-}
-
-data "aws_instance" "control_plane_live" {
-  instance_id = aws_instance.control_plane.id
-  # Ép con thám tử này phải đợi máy chuyển sang trạng thái running xong mới được đi tra cứu
-  depends_on  = [aws_ec2_instance_state.control_plane_state]
-}
-
-data "aws_instance" "worker_node1_live" {
-  instance_id = aws_instance.worker_node1_ec2.id
-  depends_on  = [aws_ec2_instance_state.worker_node1_state]
-}
-
-data "aws_instance" "worker_node2_live" {
-  instance_id = aws_instance.worker_node2_ec2.id
-  depends_on  = [aws_ec2_instance_state.worker_node2_state]
-}
-
-
-
-# =====================================================================
-# 3. KHỐI securityG
+# 3. KHỐI securityG (ĐÃ SỬA RÀO CẢN NLB)
 # =====================================================================
 resource "aws_security_group" "cluster_sec_g" {
   name        = "launch-wizard-2"
   description = "launch-wizard-2 created 2026-05-29T09:12:09.997Z"
   vpc_id      = var.vpc_id
 
-  # --- CHIỀU ĐI VÀO (INBOUND RULES / INGRESS) ---
-
-  # 1. Mở cổng SSH (22) cho mọi dải IP
+  # --- CÁC QUY TẮC CŨ GIỮ NGUYÊN (SSH, NodePort, HTTP, HTTPS, Jenkins, All Traffic nội bộ...) ---
   ingress {
     from_port   = 22
     to_port     = 22
@@ -125,7 +15,6 @@ resource "aws_security_group" "cluster_sec_g" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # 2. Mở cổng NodePort Kubernetes (30000 - 32767) cho mọi dải IP
   ingress {
     from_port   = 30000
     to_port     = 32767
@@ -133,7 +22,6 @@ resource "aws_security_group" "cluster_sec_g" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # 3. Mở cổng HTTPS (443) cho mọi dải IP
   ingress {
     from_port   = 443
     to_port     = 443
@@ -141,15 +29,6 @@ resource "aws_security_group" "cluster_sec_g" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # 4. Mở cổng Jenkins / Ứng dụng phụ (8080) cho mọi dải IP
-  ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # 5. Mở cổng HTTP (80) cho mọi dải IP
   ingress {
     from_port   = 80
     to_port     = 80
@@ -157,7 +36,16 @@ resource "aws_security_group" "cluster_sec_g" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # 6. Kubelet API (10250) - Chỉ cho phép các máy dùng chung SG này gọi lẫn nhau
+  # --- THAY ĐỔI QUAN TRỌNG: MỞ TOANG CỔNG 6443 ĐỂ THÔNG MẠCH VỚI NLB ---
+  # Thay vì để "self = true", bạn nâng cấp lên mở rộng dải IP để NLB check health & client kết nối được
+  ingress {
+    from_port   = 6443
+    to_port     = 6443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # An toàn hơn nếu bạn điền dải CIDR của VPC của bạn (ví dụ "172.31.0.0/16") thay vì 0.0.0.0/0 nếu NLB là internal.
+  }
+
+  # --- CÁC KHỐI NỘI BỘ KHÁC GIỮ NGUYÊN ---
   ingress {
     from_port = 10250
     to_port   = 10250
@@ -165,7 +53,6 @@ resource "aws_security_group" "cluster_sec_g" {
     self      = true
   }
 
-  # 7. etcd server (2379 - 2380) - Chỉ cho phép các máy dùng chung SG này gọi lẫn nhau
   ingress {
     from_port = 2379
     to_port   = 2380
@@ -173,16 +60,13 @@ resource "aws_security_group" "cluster_sec_g" {
     self      = true
   }
 
-  # 8. Kubernetes API Server (6443) - Chỉ cho phép các máy dùng chung SG này gọi lẫn nhau
   ingress {
-    from_port = 6443
-    to_port   = 6443
-    protocol  = "tcp"
+    from_port = 0
+    to_port   = 0
+    protocol  = "-1"
     self      = true
   }
 
-  # --- CHIỀU ĐI RA (OUTBOUND RULES / EGRESS) ---
-  # Mặc định mở toang cho server đi ra ngoài Internet cập nhật hệ thống
   egress {
     from_port   = 0
     to_port     = 0
@@ -190,8 +74,90 @@ resource "aws_security_group" "cluster_sec_g" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Thêm khối này vào cuối Security Group
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false # Chuyển thành false nếu bạn cần đập đi xây lại hạ tầng liên tục trong lúc lab
   }
 }
+
+
+# =====================================================================
+# 3. KHỐI Load_Balancer
+# =====================================================================
+
+resource "aws_lb" "my_lb01" {
+  name = "main-lb"
+  internal           = false
+  load_balancer_type = "network"
+
+  subnets = [
+  var.subnet_zone_b,var.subnet_zone_a]
+
+  enable_deletion_protection = false
+
+  tags = {
+    Name = "main-lb"
+    Environment = "production"
+  }
+}
+
+#Target gropp cho k8s control plane
+
+# Target group cho k8s control plane & workers
+resource "aws_lb_target_group" "k8s-api-tg" {
+  for_each    = var.nlb-port
+
+  # DÙNG HÀM REPLACE: tự động biến "kube_api" thành "kube-api" để AWS không bắt lỗi
+  name        = "tg-${replace(each.key, "_", "-")}-${each.value.port}"
+  port        = each.value.backend_port # "http" = 80, "https" = 443, "kube_api" = 6443
+  vpc_id      = var.vpc_id
+  target_type = "instance"
+  # BỔ SUNG DÒNG NÀY: Khai báo protocol cho Target Group (Sửa Lỗi số 1)
+  protocol    = each.value.protocol
+  health_check {
+    interval            = 10
+    port                = each.value.backend_port
+    protocol            = each.value.protocol
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+}
+
+# Listener cho k8s control plane
+resource "aws_lb_listener" "k8s-api-listener" {
+    for_each = var.nlb-port
+    load_balancer_arn = aws_lb.my_lb01.arn
+    port = each.value.port
+    protocol = each.value.protocol
+
+    default_action {
+      type = "forward"
+        target_group_arn = aws_lb_target_group.k8s-api-tg[each.key].arn
+    }
+}
+
+# đính kèm cho control plane
+resource "aws_lb_target_group_attachment" "control_plane_attachment" {
+  for_each = aws_instance.control_plane
+  target_group_arn = aws_lb_target_group.k8s-api-tg["kube_api"].arn
+  target_id        = each.value.id
+  port = var.nlb-port.kube_api.port
+}
+
+# # đính kèm cho worker node
+# resource "aws_lb_target_group_attachment" "worker_node_attachment" {
+#   for_each = aws_instance.worker_node
+#   target_group_arn = aws_lb_target_group.k8s-api-tg["kube_api"].arn
+#   target_id        = each.value.id
+#   port = var.nlb-port.kube_api.port
+# }
+
+# đính kèm cho worker node 80
+resource "aws_lb_target_group_attachment" "worker_node_attachment_80" {
+  for_each = aws_instance.worker_node
+  target_group_arn = aws_lb_target_group.k8s-api-tg["http"].arn
+  target_id        = each.value.id
+  port = 32080
+
+}
+
+

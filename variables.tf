@@ -19,7 +19,7 @@ variable "vpc_id" {
 variable "cluster_instance_state" {
   type        = string
   description = "Trạng thái hoạt động của cả cụm máy chủ (running hoặc stopped)"
-  default     = "stopped"
+  default     = "running"
 }
 
 # --- BIẾN MỚI THÊM: HỆ ĐIỀU HÀNH & PHẦN CỨNG ---
@@ -39,13 +39,19 @@ variable "master_instance_type" {
 variable "worker_instance_type" {
   type        = string
   description = "Cấu hình phần cứng mặc định cho các nút Worker"
-  default     = "t3.small"
+  default     = "c7i-flex.large"
 }
 
 variable "worker2_instance_type" {
   type        = string
   description = "Cấu hình phần cứng riêng cho Worker Node 2 (loại to hơn)"
   default     = "c7i-flex.large"
+}
+
+variable "loadbalancer_instance_type" {
+  type        = string
+  description = "Cấu hình phần cứng riêng cho Worker Node 2 (loại to hơn)"
+  default     = "t3.small"
 }
 
 # --- BIẾN MỚI THÊM: MẠNG (SUBNETS) ---
@@ -74,4 +80,30 @@ variable "root_volume_type" {
   type        = string
   description = "Loại ổ đĩa (gp2, gp3, io1...)"
   default     = "gp3"
+}
+
+
+variable "nlb-port" {
+  type = map(object({
+    port         = number  # Cổng mặt tiền của NLB đón khách
+    backend_port = number  # Cổng hậu trường chạy trên EC2/Worker
+    protocol     = string
+  }))
+  default = {
+    "http" = {
+      port         = 80
+      backend_port = 32080 # Phân phối về cổng NodePort này
+      protocol     = "TCP"
+    },
+    "https" = {
+      port         = 443
+      backend_port = 30443 # Phân phối về cổng NodePort HTTPS
+      protocol     = "TCP"
+    },
+    "kube_api" = {
+      port         = 6443
+      backend_port = 6443  # Giữ nguyên 6443 cho API Server
+      protocol     = "TCP"
+    }
+  }
 }

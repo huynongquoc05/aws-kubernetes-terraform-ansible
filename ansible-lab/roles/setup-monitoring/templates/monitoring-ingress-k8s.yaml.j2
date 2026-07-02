@@ -2,11 +2,11 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: prometheus-ingress
-
 spec:
   ingressClassName: nginx
   rules:
-    - host: prometheus.{{ hostvars['worker1']['ansible_host'] }}.nip.io
+{% for worker in ['worker1', 'worker2', 'worker3'] %}
+    - host: prometheus.{{ hostvars[worker]['private_ip'] }}.nip.io
       http:
         paths:
           - path: /
@@ -16,7 +16,9 @@ spec:
                 name: monitoring-kube-prometheus-prometheus
                 port:
                   number: 9090
-    - host: prometheus.{{ hostvars['worker1']['private_ip'] }}.nip.io
+{% endfor %}
+{% for lb_ip in lb_ips %}
+    - host: prometheus.{{ lb_ip }}.nip.io
       http:
         paths:
           - path: /
@@ -26,16 +28,17 @@ spec:
                 name: monitoring-kube-prometheus-prometheus
                 port:
                   number: 9090
+{% endfor %}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: grafana-ingress
-
 spec:
   ingressClassName: nginx
   rules:
-    - host: grafana.{{ hostvars['worker1']['ansible_host'] }}.nip.io
+{% for worker in ['worker1', 'worker2', 'worker3'] %}
+    - host: grafana.{{ hostvars[worker]['private_ip'] }}.nip.io
       http:
         paths:
           - path: /
@@ -45,7 +48,9 @@ spec:
                 name: monitoring-grafana
                 port:
                   number: 80
-    - host: grafana.{{ hostvars['worker1']['private_ip'] }}.nip.io
+{% endfor %}
+{% for lb_ip in lb_ips %}
+    - host: grafana.{{ lb_ip }}.nip.io
       http:
         paths:
           - path: /
@@ -55,16 +60,17 @@ spec:
                 name: monitoring-grafana
                 port:
                   number: 80
+{% endfor %}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: alertmanager-ingress
-
 spec:
   ingressClassName: nginx
   rules:
-    - host: alertmanager.{{ hostvars['worker1']['ansible_host'] }}.nip.io
+{% for worker in ['worker1', 'worker2', 'worker3'] %}
+    - host: alertmanager.{{ hostvars[worker]['private_ip'] }}.nip.io
       http:
         paths:
           - path: /
@@ -74,7 +80,9 @@ spec:
                 name: monitoring-kube-prometheus-alertmanager
                 port:
                   number: 9093
-    - host: alertmanager.{{ hostvars['worker1']['private_ip'] }}.nip.io
+{% endfor %}
+{% for lb_ip in lb_ips %}
+    - host: alertmanager.{{ lb_ip }}.nip.io
       http:
         paths:
           - path: /
@@ -84,3 +92,4 @@ spec:
                 name: monitoring-kube-prometheus-alertmanager
                 port:
                   number: 9093
+{% endfor %}

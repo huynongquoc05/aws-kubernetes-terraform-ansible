@@ -1,5 +1,5 @@
 - name: Cai dat monitoring cho K8s
-  hosts: control_plane
+  hosts: control_plane[0]
   become: true
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
