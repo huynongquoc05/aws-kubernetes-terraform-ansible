@@ -216,7 +216,7 @@ playbook2 khởi tạo cụm k8s: node đầu tiên chạy kubeadm init --upload
 
 **Dùng kubeadm thay vì EKS**
 
-EKS che đi toàn bộ phần HA control plane, etcd, load balancer..., AWS tự quản lý hết. Dùng kubeadm để tự tay dựng phần HA này giúp hiểu rõ control plane components, etcd quorum, certificate key flow giữa các control plane, và cách load balancer health check ảnh hưởng tới quá trình join — những thứ bắt buộc phải nắm khi vận hành cluster production thật.
+EKS che đi toàn bộ phần HA control plane, etcd, load balancer..., AWS tự quản lý hết. Dùng kubeadm để tự tay dựng phần HA này để hiểu rõ control plane components, etcd quorum, certificate key flow giữa các control plane, và cách load balancer health check ảnh hưởng tới quá trình join...
 
 
 ---
